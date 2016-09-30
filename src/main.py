@@ -3,25 +3,28 @@
 
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, qApp, QToolBar
+from PyQt5.QtWidgets import QGraphicsScene, QStyleOptionGraphicsItem
 from PyQt5.QtCore import Qt, QPoint
-from PyQt5.QtGui import QVector2D, QPainter
+from PyQt5.QtGui import QVector2D, QPainter, QPen, QBrush, QColor
+from graphData.graph1 import vertexCount, edges
+import math
 
-class Node(QPoint):
+class Vertex(QPoint):
 	def __init__(self, x, y):
-		self.connectNodes = []
+		self.connectVertices = []
 		super().__init__(x, y)
 
-	def addEdge(self, toNode):
-		self.connectNodes.append(toNode)
+	def addEdge(self, toVertex):
+		self.connectVertices.append(toVertex)
 
 	def power(self):
 		kValue = 1
 		normalLength = 50
 		sumPower = QVector2D(0, 0);
 		selfVector = QVector2D(self)
-		for connectNode in self.connectNodes:
-			connectNodeVector = QVector2D(connectNode)
-			subtractVector = connectNodeVector - selfVector
+		for connectVertex in self.connectVertices:
+			connectVertexVector = QVector2D(connectVertex)
+			subtractVector = connectVertexVector - selfVector
 			magnitude = kValue * (subtractVector.length() - normalLength)
 			sumPower += (magnitude / subtractVector.length()) * subtractVector
 		return sumPower
@@ -36,45 +39,69 @@ class Node(QPoint):
 		return "(" + str(self.x()) + ", " + str(self.y()) + ")"
 
 class Graph():
-	def __init__(self, *nodes):
-		self.nodes = list(nodes)
+	def __init__(self, *vertices):
+		self.vertices = list(vertices)
 
-	def addEdge(self, node1, node2):
-		self.nodes[node1].addEdge(self.nodes[node2])
-		self.nodes[node2].addEdge(self.nodes[node1])
+	def addEdge(self, vertex1, vertex2):
+		self.vertices[vertex1].addEdge(self.vertices[vertex2])
+		self.vertices[vertex2].addEdge(self.vertices[vertex1])
+
+	def numOfVertices(self):
+		return len(self.vertices)
 
 	def __repr__(self):
-		return str(self.nodes)
+		return str(self.vertices)
 
 class MainWindow(QMainWindow):
 
-	def __init__(self, graph):
+	def __init__(self):
 		super().__init__()
-		self.graph = graph
+		self.graph = Graph()
+		self.scene = QGraphicsScene(100, 100, 300, 300, self)
+		self.scene.area = 300 * 300
 		self.initUI()
 
 	def paintEvent(self, event):
 		painter = QPainter()
 		painter.begin(self)
-		for node in self.graph.nodes:
-			painter.drawEllipse(node, 3, 3)
-			for connectNode in node.connectNodes:
-				painter.drawLine(node, connectNode)
+		blue = QColor(0, 0, 255)
+		pen = QPen(blue)
+		brush = QBrush(blue, Qt.SolidPattern)
+		option = QStyleOptionGraphicsItem()
+		for vertex in self.graph.vertices:
+			vertex.ellipse = self.scene.addEllipse(vertex.x() - 3, vertex.y() - 3, 6, 6, pen, brush)
+			vertex.ellipse.paint(painter, option, self)
+			for connectVertex in vertex.connectVertices:
+				painter.drawLine(vertex, connectVertex)
 		painter.end()
 
 	def move(self):
 		first = True
-		for node in self.graph.nodes:
+		for vertex in self.graph.vertices:
 			if first:
 				first = False
 				continue
-			node.move(node.power())
+			vertex.move(vertex.power())
+		self.update()
+
+	def readGraph(self):
+		vertices = []
+		for i in range(vertexCount):
+			x = 250 + 100 * math.cos((i / vertexCount) * (2 * math.pi))
+			y = 250 + 100 * math.sin((i / vertexCount) * (2 * math.pi))
+			vertices.append(Vertex(x, y))
+		self.graph = Graph(*vertices)
+		for (edge1, edge2) in edges:
+			self.graph.addEdge(edge1, edge2)
 		self.update()
 
 	def initUI(self):
 		exitAction = QAction("Exit", self)
 		exitAction.setShortcut("Ctrl+Q")
 		exitAction.triggered.connect(qApp.quit)
+
+		readGraphAction = QAction("ReadGraph", self)
+		readGraphAction.triggered.connect(self.readGraph)
 
 		moveAction = QAction("Move", self)
 		moveAction.setShortcut("Ctrl+R")
@@ -83,17 +110,14 @@ class MainWindow(QMainWindow):
 		toolBar = QToolBar(self)
 		self.addToolBar(Qt.RightToolBarArea, toolBar)
 		toolBar.addAction(exitAction)
+		toolBar.addAction(readGraphAction)
 		toolBar.addAction(moveAction)
 		
-		self.setGeometry(700, 100, 700, 500)
+		self.setGeometry(700, 100, 600, 500)
 		self.setWindowTitle("visibleGraph")
 		self.show()
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
-	nodes = [Node(x, y) for (x, y) in [(350, 300), (270, 270), (250, 230), (250, 300)]]
-	graph = Graph(*nodes)
-	for (edge1, edge2) in [(0, 1), (1, 2), (1, 3), (2, 3)]:
-		graph.addEdge(edge1, edge2)
-	mainWindow = MainWindow(graph)
+	mainWindow = MainWindow()
 	sys.exit(app.exec_())
