@@ -1,39 +1,20 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, qApp, QToolBar
 from PyQt5.QtWidgets import QGraphicsScene, QStyleOptionGraphicsItem
 from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QVector2D, QPainter, QPen, QBrush, QColor
 from graphData.graph1 import vertexCount, edges
-import math
+import sys, math, random
 
-class Vertex(QPoint):
+class Vertex(QVector2D):
 	def __init__(self, x, y):
 		self.connectVertices = []
 		super().__init__(x, y)
 
 	def addEdge(self, toVertex):
 		self.connectVertices.append(toVertex)
-
-	def power(self):
-		kValue = 1
-		normalLength = 50
-		sumPower = QVector2D(0, 0);
-		selfVector = QVector2D(self)
-		for connectVertex in self.connectVertices:
-			connectVertexVector = QVector2D(connectVertex)
-			subtractVector = connectVertexVector - selfVector
-			magnitude = kValue * (subtractVector.length() - normalLength)
-			sumPower += (magnitude / subtractVector.length()) * subtractVector
-		return sumPower
-
-	def move(self, vector):
-		selfVector = QVector2D(self)
-		movedVector = selfVector + vector
-		self.setX(movedVector.x())
-		self.setY(movedVector.y())
 
 	def __repr__(self):
 		return "(" + str(self.x()) + ", " + str(self.y()) + ")"
@@ -49,6 +30,37 @@ class Graph():
 	def numOfVertices(self):
 		return len(self.vertices)
 
+	def repulsiveForces(self, kValue):
+		disps = [QVector2D(0, 0) for i in range(self.numOfVertices())]
+		for (i, vertex) in enumerate(self.vertices):
+			for j in range(self.numOfVertices()):
+				if i != j:
+					differenceVector = QVector2D(vertex - self.vertices[j])
+					if differenceVector.length() < 0.1:
+						differenceVector.setX(random.random() - 0.5)
+						differenceVector.setY(random.random() - 0.5)
+					disps[i] += differenceVector * pow(kValue, 2) / pow(differenceVector.length(), 2) / 2
+		return disps
+
+	def attractiveForces(self, kValue):
+		disps = [QVector2D(0, 0) for i in range(self.numOfVertices())]
+		for (index, vertex) in enumerate(self.vertices):
+			for connectVertex in vertex.connectVertices:
+				differenceVector = QVector2D(connectVertex - vertex)
+				disps[index] += differenceVector * differenceVector.length() / kValue
+		return disps
+
+	def displacement(self, kValue):
+		disps = [i[0] + i[1] for i in zip(self.repulsiveForces(kValue), self.attractiveForces(kValue))]
+		return disps
+
+	def move(self, temperature, area):
+		kValue = math.sqrt(area / self.numOfVertices())
+		disps = self.displacement(kValue)
+		for (disp, vertex) in zip(disps, self.vertices):
+			dispLength = disp.length()
+			vertex += (disp / dispLength) * min(dispLength, temperature)
+
 	def __repr__(self):
 		return str(self.vertices)
 
@@ -57,32 +69,39 @@ class MainWindow(QMainWindow):
 	def __init__(self):
 		super().__init__()
 		self.graph = Graph()
-		self.scene = QGraphicsScene(100, 100, 300, 300, self)
-		self.scene.area = 300 * 300
+		self.scene = QGraphicsScene(50, 50, 400, 400, self)
+		self.scene.area = self.scene.width() * self.scene.height()
+		self.moveCount = 1
 		self.initUI()
 
 	def paintEvent(self, event):
 		painter = QPainter()
 		painter.begin(self)
-		blue = QColor(0, 0, 255)
-		pen = QPen(blue)
-		brush = QBrush(blue, Qt.SolidPattern)
+		black = QColor(0, 0, 0)
+		pen = QPen(black)
+		brush = QBrush(black, Qt.SolidPattern)
 		option = QStyleOptionGraphicsItem()
 		for vertex in self.graph.vertices:
 			vertex.ellipse = self.scene.addEllipse(vertex.x() - 3, vertex.y() - 3, 6, 6, pen, brush)
 			vertex.ellipse.paint(painter, option, self)
 			for connectVertex in vertex.connectVertices:
-				painter.drawLine(vertex, connectVertex)
+				painter.drawLine(vertex.toPoint(), connectVertex.toPoint())
 		painter.end()
 
 	def move(self):
-		first = True
+		self.graph.move(self.temperature(), self.scene.area)
 		for vertex in self.graph.vertices:
-			if first:
-				first = False
-				continue
-			vertex.move(vertex.power())
+			vertex.setX(max(50, min(50 + self.scene.width(), vertex.x())))
+			vertex.setY(max(50, min(50 + self.scene.height(), vertex.y())))
+		self.moveCount += 1
 		self.update()
+
+	def finalMove(self):
+		while self.temperature() > 1:
+			self.move()
+
+	def temperature(self):
+		return self.scene.width() / self.moveCount
 
 	def readGraph(self):
 		vertices = []
@@ -93,6 +112,7 @@ class MainWindow(QMainWindow):
 		self.graph = Graph(*vertices)
 		for (edge1, edge2) in edges:
 			self.graph.addEdge(edge1, edge2)
+		self.moveCount = 1
 		self.update()
 
 	def initUI(self):
@@ -107,11 +127,15 @@ class MainWindow(QMainWindow):
 		moveAction.setShortcut("Ctrl+R")
 		moveAction.triggered.connect(self.move)
 
+		finalMoveAction = QAction("finalMove", self)
+		finalMoveAction.triggered.connect(self.finalMove)
+
 		toolBar = QToolBar(self)
 		self.addToolBar(Qt.RightToolBarArea, toolBar)
 		toolBar.addAction(exitAction)
 		toolBar.addAction(readGraphAction)
 		toolBar.addAction(moveAction)
+		toolBar.addAction(finalMoveAction)
 		
 		self.setGeometry(700, 100, 600, 500)
 		self.setWindowTitle("visibleGraph")
