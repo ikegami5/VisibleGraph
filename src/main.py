@@ -2,11 +2,10 @@
 # coding: utf-8
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, qApp, QToolBar
-from PyQt5.QtWidgets import QGraphicsScene, QStyleOptionGraphicsItem
+from PyQt5.QtWidgets import QGraphicsScene, QStyleOptionGraphicsItem, QComboBox
 from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QVector2D, QPainter, QPen, QBrush, QColor
-from graphData.graph1 import vertexCount, edges
-import sys, math, random
+import sys, math, random, glob, os
 
 class Vertex(QVector2D):
 	def __init__(self, x, y):
@@ -39,7 +38,7 @@ class Graph():
 					if differenceVector.length() < 0.1:
 						differenceVector.setX(random.random() - 0.5)
 						differenceVector.setY(random.random() - 0.5)
-					disps[i] += differenceVector * pow(kValue, 2) / pow(differenceVector.length(), 2) / 2
+					disps[i] += differenceVector * pow(kValue, 2) / pow(differenceVector.length(), 2) / 4
 		return disps
 
 	def attractiveForces(self, kValue):
@@ -104,6 +103,11 @@ class MainWindow(QMainWindow):
 		return self.scene.width() / self.moveCount
 
 	def readGraph(self):
+		readingFile = str(self.selectBox.currentText())
+		graphData = __import__("graphData." + readingFile, 
+			globals(), locals(), ["vertexCount", "edges"], 0)
+		vertexCount = graphData.vertexCount
+		edges = graphData.edges
 		vertices = []
 		for i in range(vertexCount):
 			x = 250 + 100 * math.cos((i / vertexCount) * (2 * math.pi))
@@ -136,6 +140,12 @@ class MainWindow(QMainWindow):
 		toolBar.addAction(readGraphAction)
 		toolBar.addAction(moveAction)
 		toolBar.addAction(finalMoveAction)
+
+		self.selectBox = QComboBox(self)
+		fileList = [os.path.basename(fileName) for fileName in glob.glob("./graphData/*.py")]
+		fileList.remove("__init__.py")
+		for index, file in enumerate(fileList):
+			self.selectBox.insertItem(index, file[:-3])
 		
 		self.setGeometry(700, 100, 600, 500)
 		self.setWindowTitle("visibleGraph")
@@ -145,3 +155,4 @@ if __name__ == '__main__':
 	app = QApplication(sys.argv)
 	mainWindow = MainWindow()
 	sys.exit(app.exec_())
+
