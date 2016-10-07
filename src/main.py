@@ -18,7 +18,7 @@ class Vertex(QVector2D):
 	def __repr__(self):
 		return "(" + str(self.x()) + ", " + str(self.y()) + ")"
 
-class Graph():
+class Graph(object):
 	def __init__(self, *vertices):
 		self.vertices = list(vertices)
 
