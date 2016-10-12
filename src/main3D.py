@@ -1,44 +1,22 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from PyQt5.QtWidgets import QApplication, QWidget, qApp, QPushButton
-from PyQt5.QtWidgets import QGraphicsScene, QStyleOptionGraphicsItem, QComboBox
-from PyQt5.QtWidgets import QGraphicsView, QHBoxLayout, QVBoxLayout, QGraphicsLineItem
-from PyQt5.QtWidgets import QGraphicsEllipseItem, QDesktopWidget, QGraphicsItem
-from PyQt5.QtCore import Qt, QPoint, QRectF, QLineF, QPointF
-from PyQt5.QtGui import QVector2D, QPainter, QPen, QBrush, QColor
-import sys, math, random, glob, os
+from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem, QStyleOptionGraphicsItem
+from PyQt5.QtCore import QRectF, Qt, QLineF
+from PyQt5.QtGui import QVector3D, QPen, QBrush, QVector2D, QPainter
 
-class Vertex(QVector2D):
-	def __init__(self, x, y):
-		super().__init__(x, y)
-		self.disp = QVector2D(0, 0)
+class Vertex3D(QVector3D):
+	def __init__(self, x, y, z):
+		super().__init__(x, y, z)
+		self.disp = QVector3D(0, 0, 0)
 		self.edges = []
 		self.circle = VertexCircle(self)
-		self.fixSign = VertexFixSign(self)
-		self.nowClicked = False
 
 	def addEdge(self, edge):
 		self.edges.append(edge)
 
-	def isFixed(self):
-		return self.fixSign.isVisible()
-
-	def fix(self):
-		self.fixSign.setVisible(True)
-
-	def release(self):
-		self.fixSign.setVisible(False)
-
-	def distanceInColor(self, other):
-		redDiff = self.circle.color.red() - other.circle.color.red()
-		greenDiff = self.circle.color.green() - other.circle.color.green()
-		blueDiff = self.circle.color.blue() - other.circle.color.blue()
-		distance = math.sqrt(pow(redDiff, 2) + pow(greenDiff, 2) + pow(blueDiff, 2)) / 256
-		return distance
-
 	def __repr__(self):
-		return "(" + str(self.x()) + ", " + str(self.y()) + ")"
+		return "(" + str(self.x()) + ", " + str(self.y()) + ", " + str(self.z()) + ")"
 
 class VertexCircle(QGraphicsEllipseItem):
 	def __init__(self, vertex):
@@ -46,71 +24,13 @@ class VertexCircle(QGraphicsEllipseItem):
 		rect = QRectF(vertex.x() - self.RADIUS, vertex.y() - self.RADIUS, self.RADIUS * 2, self.RADIUS * 2)
 		super().__init__(rect)
 		self.vertex = vertex
-		self.color = QColor(random.random() * 256, random.random() * 256, random.random() * 256)
 		self.pen = QPen(Qt.black)
-		self.brush = QBrush(self.color, Qt.SolidPattern)
+		self.brush = QBrush(Qt.black, Qt.SolidPattern)
 		self.setPen(self.pen)
 		self.setBrush(self.brush)
-		self.doubleClicked = False
-
-	def mousePressEvent(self, event):
-		scene = self.scene()
-		self.clickPoint = self.rect().topLeft()
-		scene.stability = min(16, scene.stability)
-		self.vertex.nowClicked = True
-
-	def mouseMoveEvent(self, event):
-		disp = event.lastScenePos() - event.buttonDownScenePos(Qt.LeftButton)
-		self.vertex.setX(self.clickPoint.x() + disp.x() + self.RADIUS)
-		self.vertex.setY(self.clickPoint.y() + disp.y() + self.RADIUS)
-		self.move()
-		self.vertex.fixSign.move()
-		for edge in self.vertex.edges:
-			edge.move()
-
-	def mouseReleaseEvent(self, event):
-		if self.doubleClicked:
-			self.doubleClicked = False
-		else:
-			self.vertex.fix()
-		self.vertex.nowClicked = False
-
-	def mouseDoubleClickEvent(self, event):
-		scene = self.scene()
-		self.vertex.release()
-		self.doubleClicked = True
-		scene.stability = min(16, scene.stability)
 
 	def move(self):
 		self.setRect(QRectF(self.vertex.x() - self.RADIUS, self.vertex.y() - self.RADIUS, self.RADIUS * 2, self.RADIUS * 2))
-
-class VertexFixSign(QGraphicsItem):
-	def __init__(self, vertex):
-		super().__init__(vertex.circle)
-		self.topLeft = QPointF(vertex.x() - 8, vertex.y() - 8)
-		self.topRight = QPointF(vertex.x() + 8, vertex.y() - 8)
-		self.bottomLeft = QPointF(vertex.x() - 8, vertex.y() + 8)
-		self.bottomRight = QPointF(vertex.x() + 8, vertex.y() + 8)
-		self.line1 = QGraphicsLineItem(QLineF(self.topLeft, self.bottomRight), self)
-		self.line2 = QGraphicsLineItem(QLineF(self.topRight, self.bottomLeft), self)
-		self.vertex = vertex
-		self.setVisible(False)
-
-	def paint(self, painter, option, widget):
-		painter.setPen(Qt.black)
-		painter.drawLine(self.topLeft, self.bottomRight)
-		painter.drawLine(self.topRight, self.bottomLeft)
-
-	def boundingRect(self):
-		return QRectF(self.topLeft, self.bottomRight)
-
-	def move(self):
-		self.topLeft = QPointF(self.vertex.x() - 8, self.vertex.y() - 8)
-		self.topRight = QPointF(self.vertex.x() + 8, self.vertex.y() - 8)
-		self.bottomLeft = QPointF(self.vertex.x() - 8, self.vertex.y() + 8)
-		self.bottomRight = QPointF(self.vertex.x() + 8, self.vertex.y() + 8)
-		self.line1.setLine(QLineF(self.topLeft, self.bottomRight))
-		self.line2.setLine(QLineF(self.topRight, self.bottomLeft))
 
 class Edge(QGraphicsLineItem):
 	def __init__(self, vertex1, vertex2):
@@ -127,7 +47,6 @@ class Graph(object):
 	def __init__(self, *vertices):
 		self.vertices = list(vertices)
 		self.edges = []
-		self.colored = False
 
 	def addEdge(self, vertex1Index, vertex2Index):
 		vertex1 = self.vertices[vertex1Index]
@@ -148,25 +67,17 @@ class Graph(object):
 			changeDisp = QVector2D(0, 0)
 			for (j, anotherVertex) in enumerate(self.vertices):
 				if i != j:
-					if self.colored:
-						realK = kValue * vertex.distanceInColor(anotherVertex)
-					else:
-						realK = kValue
 					differenceVector = QVector2D(vertex - anotherVertex)
 					if differenceVector.length() < 0.1:
 						differenceVector.setX(random.random() - 0.5)
 						differenceVector.setY(random.random() - 0.5)
-					changeDisp += differenceVector * pow(realK, 2) / pow(differenceVector.length(), 2)
+					changeDisp += differenceVector * pow(kValue, 2) / pow(differenceVector.length(), 2)
 			vertex.disp += changeDisp
 
 	def attractiveForces(self, kValue):
 		for edge in self.edges:
-			if self.colored:
-				realK = kValue * edge.vertex1.distanceInColor(edge.vertex2)
-			else:
-				realK = kValue
 			differenceVector = QVector2D(edge.vertex1 - edge.vertex2)
-			changeDisp = differenceVector * differenceVector.length() / realK
+			changeDisp = differenceVector * differenceVector.length() / kValue
 			edge.vertex1.disp -= changeDisp
 			edge.vertex2.disp += changeDisp
 
@@ -181,9 +92,8 @@ class Graph(object):
 		kValue = math.sqrt(area / self.numOfVertices() / 40) * edgeVertexRate
 		self.displacement(kValue)
 		for vertex in self.vertices:
-			if not (vertex.isFixed() or vertex.nowClicked):
-				dispLength = vertex.disp.length()
-				vertex += (vertex.disp / dispLength) * min(dispLength, temperature)
+			dispLength = vertex.disp.length()
+			vertex += (vertex.disp / dispLength) * min(dispLength, temperature)
 
 	def __repr__(self):
 		return str(self.vertices)
@@ -206,7 +116,11 @@ class MainWindow(QWidget):
 		painter.end()
 
 	def timerEvent(self, event):
-		self.moveGraph()
+		if self.temperature() > 1:
+			self.moveGraph()
+		else:
+			self.killTimer(self.timerID)
+			self.timerID = 0
 
 	def moveGraph(self):
 		self.graph.move(self.temperature(), self.scene.area)
