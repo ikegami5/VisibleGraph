@@ -1,16 +1,22 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem, QStyleOptionGraphicsItem
+from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem, QPushButton
+from PyQt5.QtWidgets import QStyleOptionGraphicsItem, QComboBox, QVBoxLayout
+from PyQt5.QtWidgets import QDesktopWidget, QGraphicsScene, QGraphicsView, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QWidget, qApp
 from PyQt5.QtCore import QRectF, Qt, QLineF
-from PyQt5.QtGui import QVector3D, QPen, QBrush, QVector2D, QPainter
+from PyQt5.QtGui import QVector3D, QPen, QBrush, QVector2D, QPainter, QMatrix3x3
+import os, math, sys, glob, random, numpy
+
 
 class Vertex3D(QVector3D):
+
 	def __init__(self, x, y, z):
 		super().__init__(x, y, z)
 		self.disp = QVector3D(0, 0, 0)
 		self.edges = []
-		self.circle = VertexCircle(self)
+		self.circle = Vertex3DCircle(self)
 
 	def addEdge(self, edge):
 		self.edges.append(edge)
@@ -18,10 +24,40 @@ class Vertex3D(QVector3D):
 	def __repr__(self):
 		return "(" + str(self.x()) + ", " + str(self.y()) + ", " + str(self.z()) + ")"
 
-class VertexCircle(QGraphicsEllipseItem):
+
+class MyM3R(QMatrix3x3):
+
+	def __init__(self, data):
+		super().__init__(data)
+
+	def transform(self, vector):
+		newVector = [0, 0, 0]
+		for i in range(3):
+			newVector[i] = self[i, 0] * vector.x() + self[i, 1] * vector.y() + self[i, 2] * vector.z()
+		vector.setX(newVector[0])
+		vector.setY(newVector[1])
+		vector.setZ(newVector[2])
+
+	def __repr__(self):
+		string = " / "
+		for i in range(3):
+			for j in range(3):
+				string += str(self[i, j])
+				if j != 2:
+					string += "  "
+			if i == 0:
+				string += " \\\n｜ "
+			elif i == 1:
+				string += " ｜\n \\ "
+			else:
+				string += " /"
+		return string
+
+
+class Vertex3DCircle(QGraphicsEllipseItem):
 	def __init__(self, vertex):
-		self.RADIUS = 5
-		rect = QRectF(vertex.x() - self.RADIUS, vertex.y() - self.RADIUS, self.RADIUS * 2, self.RADIUS * 2)
+		self.radius = 5
+		rect = QRectF(vertex.x() - self.radius, vertex.y() - self.radius, self.radius * 2, self.radius * 2)
 		super().__init__(rect)
 		self.vertex = vertex
 		self.pen = QPen(Qt.black)
@@ -30,9 +66,11 @@ class VertexCircle(QGraphicsEllipseItem):
 		self.setBrush(self.brush)
 
 	def move(self):
-		self.setRect(QRectF(self.vertex.x() - self.RADIUS, self.vertex.y() - self.RADIUS, self.RADIUS * 2, self.RADIUS * 2))
+		self.radius = 10 * self.vertex.z() / self.scene().height()
+		self.setRect(QRectF(self.vertex.x() - self.radius, self.vertex.y() - self.radius, self.radius * 2, self.radius * 2))
 
-class Edge(QGraphicsLineItem):
+
+class Edge3D(QGraphicsLineItem):
 	def __init__(self, vertex1, vertex2):
 		self.vertex1 = vertex1
 		self.vertex2 = vertex2
@@ -43,7 +81,9 @@ class Edge(QGraphicsLineItem):
 		newLine = QLineF(self.vertex1.toPointF(), self.vertex2.toPointF())
 		self.setLine(newLine)
 
-class Graph(object):
+
+class Graph3D(object):
+
 	def __init__(self, *vertices):
 		self.vertices = list(vertices)
 		self.edges = []
@@ -51,7 +91,7 @@ class Graph(object):
 	def addEdge(self, vertex1Index, vertex2Index):
 		vertex1 = self.vertices[vertex1Index]
 		vertex2 = self.vertices[vertex2Index]
-		edge = Edge(vertex1, vertex2)
+		edge = Edge3D(vertex1, vertex2)
 		self.edges.append(edge)
 		vertex1.addEdge(edge)
 		vertex2.addEdge(edge)
@@ -64,33 +104,45 @@ class Graph(object):
 
 	def repulsiveForces(self, kValue):
 		for (i, vertex) in enumerate(self.vertices):
-			changeDisp = QVector2D(0, 0)
+			changeDisp = QVector3D(0, 0, 0)
 			for (j, anotherVertex) in enumerate(self.vertices):
 				if i != j:
-					differenceVector = QVector2D(vertex - anotherVertex)
+					differenceVector = QVector3D(vertex - anotherVertex)
 					if differenceVector.length() < 0.1:
 						differenceVector.setX(random.random() - 0.5)
 						differenceVector.setY(random.random() - 0.5)
+					if abs(differenceVector.z()) < 0.1:
+						differenceVector.setZ(random.random() - 0.5)
 					changeDisp += differenceVector * pow(kValue, 2) / pow(differenceVector.length(), 2)
 			vertex.disp += changeDisp
 
 	def attractiveForces(self, kValue):
 		for edge in self.edges:
-			differenceVector = QVector2D(edge.vertex1 - edge.vertex2)
+			differenceVector = QVector3D(edge.vertex1 - edge.vertex2)
 			changeDisp = differenceVector * differenceVector.length() / kValue
 			edge.vertex1.disp -= changeDisp
 			edge.vertex2.disp += changeDisp
 
-	def displacement(self, kValue):
+	def centering(self, center):
+		graphCenter = QVector3D(0, 0, 0)
 		for vertex in self.vertices:
-			vertex.disp = QVector2D(0, 0)
+			graphCenter += vertex
+		graphCenter = graphCenter / self.numOfVertices()
+		changeDisp = center - graphCenter
+		for vertex in self.vertices:
+			vertex.disp += changeDisp
+
+	def displacement(self, kValue, center):
+		for vertex in self.vertices:
+			vertex.disp = QVector3D(0, 0, 0)
 		self.repulsiveForces(kValue)
 		self.attractiveForces(kValue)
+		self.centering(center)
 
-	def move(self, temperature, area):
+	def move(self, temperature, area, center):
 		edgeVertexRate = self.numOfEdges() / self.numOfVertices()
 		kValue = math.sqrt(area / self.numOfVertices() / 40) * edgeVertexRate
-		self.displacement(kValue)
+		self.displacement(kValue, center)
 		for vertex in self.vertices:
 			dispLength = vertex.disp.length()
 			vertex += (vertex.disp / dispLength) * min(dispLength, temperature)
@@ -98,11 +150,69 @@ class Graph(object):
 	def __repr__(self):
 		return str(self.vertices)
 
-class MainWindow(QWidget):
+
+class MyView(QGraphicsView):
+
+	def __init__(self, scene, parent):
+		super().__init__(scene, parent)
+
+	def center(self):
+		widget = self.parent()
+		return QVector3D(widget.height() / 2, widget.height() / 2, widget.height() / 2)
+
+	def mousePressEvent(self, event):
+		widget = self.parent()
+		if widget.timerID != 0:
+			widget.killTimer(widget.timerID)
+			widget.timerID = 0
+		self.verticesPosWhenClicked = []
+		self.mousePosWhenClicked = event.pos()
+		for vertex in self.parent().graph.vertices:
+			self.verticesPosWhenClicked.append(QVector3D(vertex))
+
+	def mouseMoveEvent(self, event):
+		vertices = self.parent().graph.vertices
+		verticesPos = [QVector3D(i) for i in self.verticesPosWhenClicked]
+		for (pos, afterPos) in zip(self.verticesPosWhenClicked, verticesPos):
+			afterPos.setX(pos.x() - self.center().x())
+			afterPos.setY(pos.y() - self.center().y())
+			afterPos.setZ(pos.z() - self.center().z())
+		disp = event.pos() - self.mousePosWhenClicked
+		xAngle = QVector2D(disp).length() * 2 * math.pi / 360
+		if QVector2D(disp).length() != 0:
+			if (-numpy.sign(disp.x())) != 0:
+				zAngle = math.acos((-disp.y()) / QVector2D(disp).length()) * (-numpy.sign(disp.x()))
+			else:
+				zAngle = math.acos((-disp.y()) / QVector2D(disp).length())
+		else:
+			zAngle = 0
+		xTurnList = [1, 0, 0, 0, math.cos(xAngle), -math.sin(xAngle), 0, math.sin(xAngle), math.cos(xAngle)]
+		zTurnList = [math.cos(zAngle), -math.sin(zAngle), 0, math.sin(zAngle), math.cos(zAngle), 0, 0, 0, 1]
+		minusZTurnList = [math.cos(-zAngle), -math.sin(-zAngle), 0, math.sin(-zAngle), math.cos(-zAngle), 0, 0, 0, 1]
+		zTurnMatrix = MyM3R(zTurnList)
+		xTurnMatrix = MyM3R(xTurnList)
+		minusZTurnMatrix = MyM3R(minusZTurnList)
+		for (pos, vertex) in zip(verticesPos, vertices):
+			zTurnMatrix.transform(pos)
+			xTurnMatrix.transform(pos)
+			minusZTurnMatrix.transform(pos)
+			vertex.setX(pos.x() + self.center().x())
+			vertex.setY(pos.y() + self.center().y())
+			vertex.setZ(pos.z() + self.center().z())
+		for vertex in vertices:
+			vertex.circle.move()
+		for edge in self.parent().graph.edges:
+			edge.move()
+
+	def mouseReleaseEvent(self, event):
+		self.parent().timerID = self.parent().startTimer(1)
+
+
+class MainWindow3D(QWidget):
 
 	def __init__(self):
 		super().__init__()
-		self.graph = Graph()
+		self.graph = Graph3D()
 		self.initUI()
 
 	def paintEvent(self, event):
@@ -118,21 +228,32 @@ class MainWindow(QWidget):
 	def timerEvent(self, event):
 		if self.temperature() > 1:
 			self.moveGraph()
+			self.autosize()
 		else:
 			self.killTimer(self.timerID)
 			self.timerID = 0
 
 	def moveGraph(self):
-		self.graph.move(self.temperature(), self.scene.area)
+		self.graph.move(self.temperature(), self.scene.area, self.view.center())
 		for vertex in self.graph.vertices:
 			vertex.setX(max(self.height() / 10, min(self.height() / 10 + self.scene.width(), vertex.x())))
 			vertex.setY(max(self.height() / 10, min(self.height() / 10 + self.scene.height(), vertex.y())))
+			vertex.setZ(max(self.height() / 10, min(self.height() / 10 + self.scene.height(), vertex.z())))
 			vertex.circle.move()
-			vertex.fixSign.move()
 		for edge in self.graph.edges:
 			edge.move()
 		self.scene.stability += 1
 		self.update()
+
+	def autosize(self):
+		center = self.view.center()
+		graphRadius = 0
+		for vertex in self.graph.vertices:
+			graphRadius = max(graphRadius, (center - vertex).length())
+		if graphRadius < self.scene.height() * 5 / 12:
+			self.zoomIn()
+		else:
+			self.zoomOut()
 
 	def stabilization(self):
 		if self.timerID != 0:
@@ -142,19 +263,6 @@ class MainWindow(QWidget):
 
 	def temperature(self):
 		return self.scene.height() / self.scene.stability
-
-	def colorToggle(self, checked):
-		if self.timerID != 0:
-			self.killTimer(self.timerID)
-			self.timerID = 0
-		if checked:
-			self.graph.colored = True
-			self.colorToggleButton.setText("Uncolor")
-		else:
-			self.graph.colored = False
-			self.colorToggleButton.setText("Color")
-		self.scene.stability = 1
-		self.stabilization()
 
 	def visibleEdgeToggle(self, checked):
 		if checked:
@@ -170,9 +278,6 @@ class MainWindow(QWidget):
 		if self.timerID != 0:
 			self.killTimer(self.timerID)
 			self.timerID = 0
-		self.graph.colored = False
-		self.colorToggleButton.setChecked(False)
-		self.colorToggleButton.setText("Color")
 		for vertex in self.graph.vertices:
 			self.scene.removeItem(vertex.circle)
 		for edge in self.graph.edges:
@@ -186,8 +291,8 @@ class MainWindow(QWidget):
 		for i in range(vertexCount):
 			x = self.height() / 2 + self.height() / 5 * math.cos((i / vertexCount) * (2 * math.pi))
 			y = self.height() / 2 + self.height() / 5 * math.sin((i / vertexCount) * (2 * math.pi))
-			vertices.append(Vertex(x, y))
-		self.graph = Graph(*vertices)
+			vertices.append(Vertex3D(x, y, 0))
+		self.graph = Graph3D(*vertices)
 		for (vertex1, vertex2) in edges:
 			self.graph.addEdge(vertex1, vertex2)
 		for edge in self.graph.edges:
@@ -200,14 +305,11 @@ class MainWindow(QWidget):
 		self.scene.stability = 1
 		self.update()
 
-	def releaseFixedVertices(self):
-		if self.timerID != 0:
-			self.killTimer(self.timerID)
-			self.timerID = 0
-		for vertex in self.graph.vertices:
-			vertex.release()
-		self.scene.stability = min(16, self.scene.stability)
-		self.stabilization()
+	def zoomIn(self):
+		self.scene.area *= 1 + self.temperature() / self.scene.height()
+
+	def zoomOut(self):
+		self.scene.area *= 1 - self.temperature() / self.scene.height()
 
 	def initUI(self):
 		self.exitButton = QPushButton("Exit", self)
@@ -216,13 +318,6 @@ class MainWindow(QWidget):
 
 		self.stabilizationButton = QPushButton("Stabilization", self)
 		self.stabilizationButton.clicked.connect(self.stabilization)
-
-		self.releaseButton = QPushButton("Release", self)
-		self.releaseButton.clicked.connect(self.releaseFixedVertices)
-
-		self.colorToggleButton = QPushButton("Color", self)
-		self.colorToggleButton.clicked.connect(self.colorToggle)
-		self.colorToggleButton.setCheckable(True)
 
 		self.visibleEdgeToggleButton = QPushButton("Invisible edge", self)
 		self.visibleEdgeToggleButton.toggled.connect(self.visibleEdgeToggle)
@@ -238,8 +333,6 @@ class MainWindow(QWidget):
 		self.toolLayout = QVBoxLayout()
 		self.toolLayout.addWidget(self.exitButton)
 		self.toolLayout.addWidget(self.stabilizationButton)
-		self.toolLayout.addWidget(self.releaseButton)
-		self.toolLayout.addWidget(self.colorToggleButton)
 		self.toolLayout.addWidget(self.visibleEdgeToggleButton)
 		self.toolLayout.addWidget(self.selectBox)
 		
@@ -251,10 +344,10 @@ class MainWindow(QWidget):
 		self.setGeometry(windowX, windowY, width, height)
 		sceneRect = QRectF(self.height() / 10, self.height() / 10, self.height() / 10 * 8, self.height() / 10 * 8)
 		self.scene = QGraphicsScene(sceneRect, self)
-		self.view = QGraphicsView(self.scene, self)
+		self.view = MyView(self.scene, self)
 		self.scene.area = self.scene.width() * self.scene.height()
 		self.scene.stability = 1
-		self.setWindowTitle("visibleGraph")
+		self.setWindowTitle("visibleGraph3D")
 
 		self.mainLayout = QHBoxLayout(self)
 		self.mainLayout.addWidget(self.view)
@@ -262,12 +355,11 @@ class MainWindow(QWidget):
 		self.setLayout(self.mainLayout)
 
 		self.timerID = 0
-
 		self.readGraph()
 		self.show()
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
-	mainWindow = MainWindow()
+	mainWindow = MainWindow3D()
 	sys.exit(app.exec_())
 
