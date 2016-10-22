@@ -12,3 +12,4 @@ edges = [
 	(6, 7)
 ]
 
+labels = None

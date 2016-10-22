@@ -81,6 +81,8 @@ if __name__ == "__main__":
 		file.write("\n")
 		file.write("]\n")
 		file.write("\n")
+		file.write("labels = None\n")
+		file.write("\n")
 		file.close()
 
 

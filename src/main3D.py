@@ -4,8 +4,8 @@
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem, QPushButton
 from PyQt5.QtWidgets import QStyleOptionGraphicsItem, QComboBox, QVBoxLayout
 from PyQt5.QtWidgets import QDesktopWidget, QGraphicsScene, QGraphicsView, QHBoxLayout
-from PyQt5.QtWidgets import QApplication, QWidget, qApp
-from PyQt5.QtCore import QRectF, Qt, QLineF
+from PyQt5.QtWidgets import QApplication, QWidget, qApp, QLineEdit, QLabel
+from PyQt5.QtCore import QRectF, Qt, QLineF, QRect
 from PyQt5.QtGui import QVector3D, QPen, QBrush, QVector2D, QPainter, QMatrix3x3
 import os, math, sys, glob, random, numpy
 
@@ -17,9 +17,13 @@ class Vertex3D(QVector3D):
 		self.disp = QVector3D(0, 0, 0)
 		self.edges = []
 		self.circle = Vertex3DCircle(self)
+		self.label = None
 
 	def addEdge(self, edge):
 		self.edges.append(edge)
+
+	def setLabel(self, label):
+		self.label = label
 
 	def __repr__(self):
 		return "(" + str(self.x()) + ", " + str(self.y()) + ", " + str(self.z()) + ")"
@@ -64,6 +68,15 @@ class Vertex3DCircle(QGraphicsEllipseItem):
 		self.brush = QBrush(Qt.black, Qt.SolidPattern)
 		self.setPen(self.pen)
 		self.setBrush(self.brush)
+
+	def contains(self, point):
+		center = QVector2D(self.vertex.x() + 12, self.vertex.y())
+		vector = QVector2D(point)
+		diff = center - vector
+		if diff.length() < self.radius + 1:
+			return True
+		else:
+			return False
 
 	def move(self):
 		self.radius = 10 * self.vertex.z() / self.scene().height()
@@ -161,6 +174,10 @@ class MyView(QGraphicsView):
 		return QVector3D(widget.height() / 2, widget.height() / 2, widget.height() / 2)
 
 	def mousePressEvent(self, event):
+		for vertex in self.parent().graph.vertices:
+			if vertex.circle.contains(event.pos() + self.pos()) and vertex.label != None:
+				self.parent().labelLine.setText(vertex.label)
+				break
 		widget = self.parent()
 		if widget.timerID != 0:
 			widget.killTimer(widget.timerID)
@@ -205,7 +222,8 @@ class MyView(QGraphicsView):
 			edge.move()
 
 	def mouseReleaseEvent(self, event):
-		self.parent().timerID = self.parent().startTimer(1)
+		if self.parent().timerID == 0:
+			self.parent().timerID = self.parent().startTimer(1)
 
 
 class MainWindow3D(QWidget):
@@ -250,7 +268,7 @@ class MainWindow3D(QWidget):
 		graphRadius = 0
 		for vertex in self.graph.vertices:
 			graphRadius = max(graphRadius, (center - vertex).length())
-		if graphRadius < self.scene.height() * 5 / 12:
+		if graphRadius < self.scene.height() * 11 / 24:
 			self.zoomIn()
 		else:
 			self.zoomOut()
@@ -284,9 +302,10 @@ class MainWindow3D(QWidget):
 			self.scene.removeItem(edge)
 		readingFile = str(self.selectBox.currentText())
 		graphData = __import__("graphData." + readingFile, 
-			globals(), locals(), ["vertexCount", "edges"], 0)
+			globals(), locals(), ["vertexCount", "edges", "labels"], 0)
 		vertexCount = graphData.vertexCount
 		edges = graphData.edges
+		labels = graphData.labels
 		vertices = []
 		for i in range(vertexCount):
 			x = self.height() / 2 + self.height() / 5 * math.cos((i / vertexCount) * (2 * math.pi))
@@ -302,6 +321,9 @@ class MainWindow3D(QWidget):
 				edge.setVisible(False)
 		for vertex in self.graph.vertices:
 			self.scene.addItem(vertex.circle)
+		if labels != None:
+			for (vertex, label) in zip(self.graph.vertices, labels):
+				vertex.setLabel(label)
 		self.scene.stability = 1
 		self.update()
 
@@ -330,10 +352,20 @@ class MainWindow3D(QWidget):
 			self.selectBox.insertItem(index, file[:-3])
 		self.selectBox.activated.connect(self.readGraph)
 
+		self.labelLabel = QLabel("Label:", self)
+		self.labelLabel.setMaximumSize(120, 20)
+		self.labelLine = QLineEdit(self)
+		self.labelLine.setReadOnly(True)
+		self.labelLine.setMaximumWidth(120)
+		self.labelLayout = QVBoxLayout()
+		self.labelLayout.addWidget(self.labelLabel)
+		self.labelLayout.addWidget(self.labelLine)
+
 		self.toolLayout = QVBoxLayout()
 		self.toolLayout.addWidget(self.exitButton)
 		self.toolLayout.addWidget(self.stabilizationButton)
 		self.toolLayout.addWidget(self.visibleEdgeToggleButton)
+		self.toolLayout.addLayout(self.labelLayout)
 		self.toolLayout.addWidget(self.selectBox)
 		
 		desktop = QDesktopWidget()

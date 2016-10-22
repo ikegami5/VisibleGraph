@@ -10,3 +10,4 @@ edges = [
 	(4, 5)
 ]
 
+labels = None

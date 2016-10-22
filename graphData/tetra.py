@@ -8,3 +8,4 @@ edges = [
 	(2, 3)
 ]
 
+labels = None

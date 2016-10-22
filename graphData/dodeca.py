@@ -24,3 +24,4 @@ edges = [
 	(18, 19)
 ]
 
+labels = None
