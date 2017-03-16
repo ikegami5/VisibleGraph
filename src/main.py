@@ -242,15 +242,15 @@ class MainWindow(QWidget):
 		self.scene.stability = 1
 		self.stabilization()
 
-	def visibleEdgeToggle(self, checked):
+	def hideEdgeToggle(self, checked):
 		if checked:
 			for edge in self.graph.edges:
 				edge.setVisible(False)
-			self.visibleEdgeToggleButton.setText("Visible edge")
+			self.hideEdgeToggleButton.setText("Show edge")
 		else:
 			for edge in self.graph.edges:
 				edge.setVisible(True)
-			self.visibleEdgeToggleButton.setText("Invisible edge")
+			self.hideEdgeToggleButton.setText("Hide edge")
 
 	def readGraph(self):
 		if self.timerID != 0:
@@ -278,7 +278,7 @@ class MainWindow(QWidget):
 			self.graph.addEdge(vertex1, vertex2)
 		for edge in self.graph.edges:
 			self.scene.addItem(edge)
-		if self.visibleEdgeToggleButton.isChecked():
+		if self.hideEdgeToggleButton.isChecked():
 			for edge in self.graph.edges:
 				edge.setVisible(False)
 		for vertex in self.graph.vertices:
@@ -310,9 +310,9 @@ class MainWindow(QWidget):
 		self.colorToggleButton.clicked.connect(self.colorToggle)
 		self.colorToggleButton.setCheckable(True)
 
-		self.visibleEdgeToggleButton = QPushButton("Invisible edge", self)
-		self.visibleEdgeToggleButton.toggled.connect(self.visibleEdgeToggle)
-		self.visibleEdgeToggleButton.setCheckable(True)
+		self.hideEdgeToggleButton = QPushButton("Hide edge", self)
+		self.hideEdgeToggleButton.toggled.connect(self.hideEdgeToggle)
+		self.hideEdgeToggleButton.setCheckable(True)
 
 		self.selectBox = QComboBox(self)
 		fileList = [os.path.basename(fileName) for fileName in glob.glob("./graphData/*.py")]
@@ -326,7 +326,7 @@ class MainWindow(QWidget):
 		self.toolLayout.addWidget(self.stabilizationButton)
 		self.toolLayout.addWidget(self.releaseButton)
 		self.toolLayout.addWidget(self.colorToggleButton)
-		self.toolLayout.addWidget(self.visibleEdgeToggleButton)
+		self.toolLayout.addWidget(self.hideEdgeToggleButton)
 		self.toolLayout.addWidget(self.selectBox)
 		
 		desktop = QDesktopWidget()
